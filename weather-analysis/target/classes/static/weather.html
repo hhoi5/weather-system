@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>天气数据分析系统</title>
+    <script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+    <style>
+        body {
+            font-family: "Microsoft Yahei", sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f7fa;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        .title {
+            text-align: center;
+            color: #7f8c8d;
+            margin-bottom: 30px;
+        }
+        #chart {
+            width: 100%;
+            height: 500px;
+            margin-top: 20px;
+        }
+        .controls {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 14px;
+            margin: 0 10px;
+            cursor: pointer;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+        .loading {
+            text-align: center;
+            color: #7f8c8d;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>天气数据分析系统</h1>
+    <div class="title">四大城市近 7 日温度趋势对比</div>
+
+    <div class="controls">
+        <button onclick="loadData()">🔄 刷新数据</button>
+        <button onclick="toggleChartType()">📊 切换图表类型</button>
+    </div>
+
+    <div id="loading" class="loading">正在加载数据...</div>
+    <div id="chart"></div>
+</div>
+
+<script>
+    let myChart = null;
+    let chartType = 'line'; // line 或 bar
+
+    function loadData() {
+        document.getElementById('loading').style.display = 'block';
+
+        fetch('/api/weather/collect')
+            .then(res => res.json())
+            .then(result => {
+                document.getElementById('loading').style.display = 'none';
+
+                if (result.code !== 200) {
+                    alert('数据加载失败');
+                    return;
+                }
+
+                initChart(result.data);
+            })
+            .catch(err => {
+                console.error('获取数据失败', err);
+                document.getElementById('loading').innerText = '数据加载失败，请刷新重试';
+            });
+    }
+
+    function initChart(cityData) {
+        const chartDom = document.getElementById('chart');
+
+        if (myChart !== null) {
+            myChart.dispose();
+        }
+
+        myChart = echarts.init(chartDom);
+
+        // 取出第一个城市的日期（所有城市一样）
+        const firstCityData = cityData[0].past7Days;
+        const dates = firstCityData.map(item => item.date);
+
+        // 系列数据：4 个城市的温度
+        const series = cityData.map(city => {
+            return {
+                name: city.city,
+                type: chartType,
+                smooth: chartType === 'line',
+                data: city.past7Days.map(item => item.tempAvg.toFixed(1)),
+                areaStyle: chartType === 'line' ? { opacity: 0.3 } : null
+            };
+        });
+
+        const option = {
+            tooltip: {
+                trigger: 'axis',
+                formatter: function(params) {
+                    let result = params[0].name + '<br/>';
+                    params.forEach(param => {
+                        result += param.marker + param.seriesName + ': ' + param.value + '℃<br/>';
+                    });
+                    return result;
+                }
+            },
+            legend: {
+                data: cityData.map(item => item.city),
+                top: 10
+            },
+            grid: {
+                left: '3%',
+                right: '4%',
+                bottom: '3%',
+                containLabel: true
+            },
+            xAxis: {
+                type: 'category',
+                data: dates,
+                boundaryGap: chartType === 'bar' ? false : true
+            },
+            yAxis: {
+                type: 'value',
+                name: '平均温度 ℃'
+            },
+            series: series
+        };
+
+        myChart.setOption(option);
+
+        window.addEventListener('resize', () => {
+            myChart.resize();
+        });
+    }
+
+    function toggleChartType() {
+        chartType = chartType === 'line' ? 'bar' : 'line';
+        loadData();
+    }
+
+    // 页面加载时自动加载数据
+    loadData();
+</script>
+</body>
+</html>
